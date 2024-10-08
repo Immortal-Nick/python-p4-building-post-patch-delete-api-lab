@@ -23,12 +23,17 @@ def bakeries():
     bakeries = [bakery.to_dict() for bakery in Bakery.query.all()]
     return make_response(  bakeries,   200  )
 
-@app.route('/bakeries/<int:id>')
+@app.route('/bakeries/<int:id>', methods=['PATCH'])
 def bakery_by_id(id):
 
     bakery = Bakery.query.filter_by(id=id).first()
+
+    new_bakery = request.form.get('name')
+    bakery.name = new_bakery
+    db.session.commit()
+
     bakery_serialized = bakery.to_dict()
-    return make_response ( bakery_serialized, 200  )
+    return make_response ( jsonify(bakery_serialized), 200)
 
 @app.route('/baked_goods/by_price')
 def baked_goods_by_price():
@@ -44,6 +49,58 @@ def most_expensive_baked_good():
     most_expensive = BakedGood.query.order_by(BakedGood.price.desc()).limit(1).first()
     most_expensive_serialized = most_expensive.to_dict()
     return make_response( most_expensive_serialized,   200  )
+
+@app.route('/baked_goods', methods=['POST'])
+def baked_goods():
+    try:
+        # Get data from the form
+        name = request.form.get("name")
+        price = request.form.get("price")
+        bakery_id = request.form.get("bakery_id")
+        
+        # Validate that required fields are provided
+        if not name or not price or not bakery_id:
+            return make_response(jsonify({"error": "Missing required fields"}), 400)
+
+        # Ensure price is a float and bakery_id is an int
+        try:
+            price = float(price)
+            bakery_id = int(bakery_id)
+        except ValueError:
+            return make_response(jsonify({"error": "Invalid data type for price or bakery_id"}), 400)
+
+        # Create a new baked good
+        new_baked_good = BakedGood(
+            name=name,
+            price=price,
+            bakery_id=bakery_id
+        )
+
+        # Add and commit to the database
+        db.session.add(new_baked_good)
+        db.session.commit()
+
+        # Serialize and return the created baked good
+        baked_good_dict = new_baked_good.to_dict()
+
+        return make_response(jsonify(baked_good_dict), 201)
+
+    except Exception as e:
+        # Roll back the session in case of error
+        db.session.rollback()
+        return make_response(jsonify({"error": str(e)}), 500)
+
+
+@app.route('/baked_goods/<int:id>', methods=['DELETE'])
+def delete_baked_good(id):
+    baked_good = BakedGood.query.get(id)
+    if not baked_good:
+        return jsonify({"error": "Baked good not found"}), 404
+    
+    db.session.delete(baked_good)
+    db.session.commit()
+    
+    return jsonify({"message": "Baked good deleted successfully"}), 200
 
 if __name__ == '__main__':
     app.run(port=5555, debug=True)
